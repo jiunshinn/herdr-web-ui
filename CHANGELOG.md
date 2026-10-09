@@ -11,6 +11,7 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
 - A tap on the model in the chat's input card opens a menu to change it: Model and Effort for
   Claude Code, Model and effort for Codex, Model for pi. Each one opens the agent's own picker,
   which the chat shows as a card to pick from, so the list is always the one the agent offers.
+  A conversation that names no model yet (a new one, or one just cleared) shows Model there.
 - The file viewer numbers a text file's lines and colors source code by its language (from the
   file's name), in the colors of the theme and palette. A copy still takes the text without the
   numbers. Markdown files are numbered but stay plain.
@@ -28,6 +29,10 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
   their text, and a pinch no longer zooms the whole app (Settings sizes the text).
 
 ### Fixed
+- Claude Code's effort slider (`/effort`) shows as a card in a pane under about 70 columns wide,
+  such as a split in herdr or a pane the phone's terminal view has sized, and when the slider is
+  on max. Claude draws the slider differently there, and the chat showed no card, so a level could
+  only be picked in the terminal.
 - On a phone, the workspace drawer closes all the way when you swipe it shut from the dimmed area
   beside it. It stopped partway and stayed there, and the menu button could not close it until
   the drawer itself was swiped again.

@@ -372,7 +372,10 @@ One set for both themes: the card is island black wherever it shows.
   follows a finger dragged down from its head or from a list at its top, and drops
   (`--dur-sheet-out`) however it closes. Let go past `30%` of its height, or flicked down, it
   closes through the same close as its scrim; short of that it springs back. A busy dialog
-  (a deed pending) does not follow the finger. lib/sheets.ts.
+  (a deed pending) does not follow the finger. A stroke on a sheet or its scrim pans nothing
+  behind it (`touch-action: none`); the sheet's own lists still scroll and keep their overscroll.
+  A closed sheet's drop is drawn in a closed shadow root, so no query of the page sees it.
+  lib/sheets.ts.
 - While a phone's keyboard is up (`data-keyboard`), the scrim is `--app-height` tall instead of the
   whole screen, so a sheet and its text field sit above the keyboard, and the sheet drops its
   safe-area padding.

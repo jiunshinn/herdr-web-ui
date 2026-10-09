@@ -1,12 +1,11 @@
 import type { Page } from "playwright-core";
 
 /**
- * Resolves once no phone sheet is moving: none still rising, and no closed sheet's last frame
- * still dropping (src/lib/sheets.ts). A sheet rises over --dur-sheet, so a check that measures one
- * the moment it opens reads it short of where it comes to rest.
+ * Resolves once no phone sheet is still rising (src/lib/sheets.ts). A sheet rises over --dur-sheet,
+ * so a check that measures one the moment it opens reads it short of where it comes to rest. A
+ * closed sheet's drop is drawn in a closed shadow root, out of every query's reach.
  */
 export async function sheetsSettled(page: Page): Promise<void> {
-  await page.waitForFunction(() => document.querySelector(".modal-scrim.is-leaving") === null
-    && document.getAnimations().every((animation) => animation.playState !== "running"
-      || !/^(?:sheet|scrim)-(?:in|out)$/.test((animation as CSSAnimation).animationName ?? "")), undefined, { timeout: 5_000 });
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"
+    || !/^(?:sheet|scrim)-in$/.test((animation as CSSAnimation).animationName ?? "")), undefined, { timeout: 5_000 });
 }

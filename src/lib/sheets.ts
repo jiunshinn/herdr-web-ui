@@ -5,11 +5,13 @@
  * (`useSheetSwipe`), and drops back down when it closes, however it was closed.
  *
  * React removes a closed sheet at once, so the drop is drawn by its last frame: the removed
- * scrim is put back at the end of <body>, inert and hidden from assistive tech, without its
- * ids or its aria-modal, and goes once it has slid out (`.is-leaving`). Nothing of the app's
- * state lingers, only pixels. A sheet is followed from the moment it rises (its `scrim-in`
- * animation starts) until it is gone, so the page is watched only while one is open. Under
- * reduced motion nothing rises, so nothing is followed or drops.
+ * scrim is put back, inert and hidden from assistive tech, inside a closed shadow root at the
+ * end of <body>, and goes once it has slid out (`.is-leaving`). There no query of the page (the
+ * app's, a browser script's) finds it, so a sheet opened again at once is the only one of its
+ * kind; the root adopts the page's own rules, under the <html> element's data attributes, so it
+ * looks as it did. Nothing of the app's state lingers, only pixels. A sheet is followed from the
+ * moment it rises (its `scrim-in` animation starts) until it is gone, so the page is watched only
+ * while one is open. Under reduced motion nothing rises, so nothing is followed or drops.
  */
 import { useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 
@@ -56,12 +58,14 @@ function scrolledUnder(target: EventTarget | null, surface: HTMLElement): number
   return 0;
 }
 
-/** A field edits its text, a slider and a reorder grip take the stroke for themselves. */
+/**
+ * A field edits its text, a slider and a reorder grip take the stroke for themselves. Only what
+ * lies inside the sheet: the sheet itself takes no pan of the browser's either (styles.css).
+ */
 function ownsStroke(target: EventTarget | null, surface: HTMLElement): boolean {
-  for (let node = target instanceof HTMLElement ? target : null; node; node = node.parentElement) {
+  for (let node = target instanceof HTMLElement ? target : null; node && node !== surface; node = node.parentElement) {
     if (node.isContentEditable || /^(?:INPUT|TEXTAREA|SELECT)$/.test(node.tagName)) return true;
     if (getComputedStyle(node).touchAction === "none") return true;
-    if (node === surface) break;
   }
   return false;
 }
@@ -176,21 +180,51 @@ function useLatest<T>(value: T): MutableRefObject<T> {
   return ref;
 }
 
-/** The last frame of a closed sheet: put back, out of reach, until it has slid out. */
-function leave(scrim: HTMLElement): void {
-  scrim.classList.add("is-leaving");
-  scrim.inert = true;
-  scrim.setAttribute("aria-hidden", "true");
-  // it is not a dialog any more, and the ids would repeat in the next one's
-  for (const node of [scrim, ...scrim.querySelectorAll<HTMLElement>("[aria-modal], [id]")]) {
-    node.removeAttribute("aria-modal");
-    node.removeAttribute("id");
+/** The page's rules as one sheet a shadow root can adopt, built again only when a stylesheet came or went. */
+let pageRules: { count: number; sheet: CSSStyleSheet } | null = null;
+function pageStyles(): CSSStyleSheet | null {
+  if (typeof CSSStyleSheet === "undefined" || !("adoptedStyleSheets" in ShadowRoot.prototype)) return null;
+  if (pageRules?.count === document.styleSheets.length) return pageRules.sheet;
+  let text = "";
+  for (const sheet of document.styleSheets) {
+    try {
+      for (const rule of sheet.cssRules) if (!(rule instanceof CSSImportRule)) text += `${rule.cssText}\n`;
+    } catch {
+      // another origin's sheet keeps its rules to itself; none of the app's is one
+    }
   }
+  const sheet = new CSSStyleSheet();
+  try { sheet.replaceSync(text); } catch { return null; }
+  pageRules = { count: document.styleSheets.length, sheet };
+  return sheet;
+}
+
+/** The last frame of a closed sheet: put back, out of reach, until it has slid out. */
+function leave(scrim: HTMLElement, scrolled: WeakMap<Element, number>): void {
+  const rules = pageStyles();
+  // a browser with no adoptable sheets has no way to draw it apart from the page: it goes at once
+  if (rules === null) return;
   // a frame or a player put back would load its document or its media again: the drop goes without them
   for (const node of scrim.querySelectorAll("iframe, embed, object, video, audio")) node.remove();
-  document.body.append(scrim);
+  scrim.classList.add("is-leaving");
+  const host = document.createElement("div");
+  host.inert = true;
+  host.setAttribute("aria-hidden", "true");
+  const root = host.attachShadow({ mode: "closed" });
+  root.adoptedStyleSheets = [rules];
+  // the rules that hang off <html> (the theme, the density, a raised keyboard) find the same marks here
+  const page = document.createElement("div");
+  for (const { name, value } of document.documentElement.attributes) if (name.startsWith("data-")) page.setAttribute(name, value);
+  page.append(scrim);
+  root.append(page);
+  document.body.append(host);
+  // a list put back starts at its top: it drops where the reader had it
+  for (const node of [scrim, ...scrim.querySelectorAll("*")]) {
+    const top = scrolled.get(node);
+    if (top !== undefined) node.scrollTop = top;
+  }
   let timer = 0;
-  const gone = (): void => { window.clearTimeout(timer); scrim.remove(); };
+  const gone = (): void => { window.clearTimeout(timer); host.remove(); };
   timer = window.setTimeout(gone, LEAVE_MS);
   scrim.addEventListener("animationend", (event) => { if (event.animationName === "sheet-out") gone(); });
 }
@@ -203,13 +237,19 @@ export function watchSheetExits(): () => void {
   const sheets = media(SHEET_QUERY);
   const reduced = media("(prefers-reduced-motion: reduce)");
   const open = new Set<HTMLElement>();
+  // where each list in an open sheet is scrolled to: a detached one reads 0, and its drop should not jump
+  const scrolled = new WeakMap<Element, number>();
+  const onScroll = (event: Event): void => {
+    const node = event.target;
+    if (open.size > 0 && node instanceof Element && node.closest(".modal-scrim") !== null) scrolled.set(node, node.scrollTop);
+  };
   // the whole page is watched only while a sheet is open: an attached terminal rewrites its rows
   // many times a second, and each batch of records costs a look at the open sheets alone
   const observer = new MutationObserver(() => {
     for (const scrim of open) {
       if (scrim.isConnected) continue;
       open.delete(scrim);
-      if (sheets?.matches === true && reduced?.matches !== true && !scrim.classList.contains("is-leaving")) leave(scrim);
+      if (sheets?.matches === true && reduced?.matches !== true && !scrim.classList.contains("is-leaving")) leave(scrim, scrolled);
     }
     if (open.size === 0) observer.disconnect();
   });
@@ -220,8 +260,10 @@ export function watchSheetExits(): () => void {
     open.add(scrim);
   };
   document.addEventListener("animationstart", onStart, true);
+  document.addEventListener("scroll", onScroll, { capture: true, passive: true });
   return () => {
     document.removeEventListener("animationstart", onStart, true);
+    document.removeEventListener("scroll", onScroll, { capture: true });
     observer.disconnect();
     open.clear();
   };

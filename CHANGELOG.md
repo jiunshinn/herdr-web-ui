@@ -8,6 +8,9 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
 ## [Unreleased]
 
 ### Added
+- A tap on the model in the chat's input card opens a menu to change it: Model and Effort for
+  Claude Code, Model and effort for Codex, Model for pi. Each one opens the agent's own picker,
+  which the chat shows as a card to pick from, so the list is always the one the agent offers.
 - The file viewer numbers a text file's lines and colors source code by its language (from the
   file's name), in the colors of the theme and palette. A copy still takes the text without the
   numbers. Markdown files are numbered but stay plain.

@@ -28,6 +28,9 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
   their text, and a pinch no longer zooms the whole app (Settings sizes the text).
 
 ### Fixed
+- On a phone, the workspace drawer closes all the way when you swipe it shut from the dimmed area
+  beside it. It stopped partway and stayed there, and the menu button could not close it until
+  the drawer itself was swiped again.
 - herdr in your terminal shows a pane whole again once you leave the browser tab that had it
   open. herdr holds a pane at the size of a web UI attach until that attach ends, so a desktop
   tab left open on a pane kept it at the browser's size, and herdr drew it cut off at its split's

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import hljs from "./highlight.ts";
+import hljs from "./hljs.ts";
 import { codeLanguage, escapeHtml, highlightable, normalizeNewlines, numberedLinesHtml, splitMarkupLines } from "./codeView.ts";
 
 const textOf = (html: string) => html.replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#x27;/g, "'").replace(/&amp;/g, "&");

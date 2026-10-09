@@ -19,11 +19,11 @@ const MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024;
 const TEXT_PREVIEW_BYTES = 256 * 1024;
 
 type Highlighter = typeof import("highlight.js/lib/common").default;
-/** highlight.js is its own chunk (lib/highlight.ts), loaded with the first file that has a language. */
+/** highlight.js is its own chunk (lib/hljs.ts), loaded with the first file that has a language. */
 let highlighterLoad: Promise<Highlighter> | null = null;
 
 function loadHighlighter(): Promise<Highlighter> {
-  highlighterLoad ??= import("../lib/highlight.ts").then((module) => module.default).catch((reason: unknown) => {
+  highlighterLoad ??= import("../lib/hljs.ts").then((module) => module.default).catch((reason: unknown) => {
     // a chunk that failed to load (offline, or the app was updated) is tried again with the next file
     highlighterLoad = null;
     throw reason;

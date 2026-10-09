@@ -5,7 +5,8 @@ import type { Page } from "playwright-core";
  * open or opening. A phone lists the pages first, and from another page the way there is back.
  */
 export async function openSettingsPage(page: Page, name: string): Promise<void> {
-  const dialog = page.locator(".settings-dialog");
+  // the open dialog, not the last frame of one a phone is still dropping (src/lib/sheets.ts)
+  const dialog = page.locator(".modal-scrim:not(.is-leaving) > .settings-dialog");
   await dialog.waitFor();
   const tab = dialog.getByRole("tab", { name, exact: true });
   if (await tab.count() === 0) await dialog.getByRole("button", { name: "Back to settings", exact: true }).click();

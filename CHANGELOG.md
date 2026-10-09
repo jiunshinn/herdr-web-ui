@@ -11,6 +11,9 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
 - The file viewer numbers a text file's lines and colors source code by its language (from the
   file's name), in the colors of the theme and palette. A copy still takes the text without the
   numbers. Markdown files are numbered but stay plain.
+- Workspaces can be reordered on a phone or tablet: hold a row until it lifts, drag it, and let
+  go where the line shows. Before, a long press on iOS showed the system's drag preview but
+  dropped nothing. The row's ⋯ menu also has Move up and Move down.
 
 ### Changed
 - On a phone the app moves and responds like an iPhone app rather than a web page. Menus,

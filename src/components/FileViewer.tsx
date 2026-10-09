@@ -6,11 +6,12 @@ import { DirectoryBrowser } from "./DirectoryBrowser.tsx";
 import type { FileInfo } from "../../shared/protocol.ts";
 import { ApiError } from "../lib/api.ts";
 import { formatBytes } from "../lib/bridgeProgress.ts";
-import { codeLanguage, escapeHtml, normalizeNewlines, numberedLinesHtml, splitMarkupLines } from "../lib/codeView.ts";
+import { codeLanguage, escapeHtml, highlightable, normalizeNewlines, numberedLinesHtml, splitMarkupLines } from "../lib/codeView.ts";
 import { LOCAL_MACHINE } from "../../shared/machines.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useT } from "../lib/i18n.ts";
 import { nativeModalOver, useFocusTrap } from "../lib/useFocusTrap.ts";
+import { useSheetSwipe } from "../lib/sheets.ts";
 
 /** Bigger images are offered as a download: a phone decodes an image whole. */
 const MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -30,7 +31,7 @@ function loadHighlighter(): Promise<Highlighter> {
   return highlighterLoad;
 }
 
-/** A text file's start, numbered by line: plain at once, then colored when highlight.js knows its language. */
+/** A text file's start, numbered by line: plain at once, then colored when highlight.js knows its language (Markdown stays plain). */
 function CodeText({ name, text }: { name: string; text: string }) {
   const source = useMemo(() => normalizeNewlines(text), [text]);
   const plain = useMemo(() => splitMarkupLines(escapeHtml(source)), [source]);
@@ -40,7 +41,7 @@ function CodeText({ name, text }: { name: string; text: string }) {
     if (language === null) return;
     let cancelled = false;
     loadHighlighter().then((hljs) => {
-      if (cancelled || hljs.getLanguage(language) === undefined) return;
+      if (cancelled || !highlightable(hljs, language)) return;
       setColored(splitMarkupLines(hljs.highlight(source, { language, ignoreIllegals: true }).value));
     }).catch(() => { /* the plain lines stay */ });
     return () => { cancelled = true; };
@@ -84,6 +85,7 @@ export function FileViewer({ path: asked, paneId, onClose, onOpen, keyboardActiv
   const [text, setText] = useState<string | null>(null);
   // Escape closes it, Tab stays in it, and the focus goes back to the row that opened it
   const surface = useFocusTrap<HTMLElement>(true);
+  useSheetSwipe(surface, onClose);
   useEffect(() => setPath(asked), [asked]);
 
   useEffect(() => {

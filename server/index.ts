@@ -58,7 +58,7 @@ import {
   worktreeRemove,
 } from "./herdr/client.ts";
 import { type AlertTiming, createPushService, defaultStateDir, handlePushRequest } from "./push.ts";
-import { claudeHeldIsGrey, claudeInputDraft, viewportShowsLive, codexQuestionsCollapsed, handlePromptRequest, isClaudeHeld, heldCandidate, modelListWaits, noteSubmitted, parseInteractivePrompt, promptWaitEnded } from "./prompt.ts";
+import { CLAUDE_CLEAR_INPUT_KEYS, claudeClearableDraft, claudeHeldIsGrey, claudeInputDraft, viewportShowsLive, codexQuestionsCollapsed, handlePromptRequest, isClaudeHeld, heldCandidate, modelListWaits, noteSubmitted, parseInteractivePrompt, promptWaitEnded } from "./prompt.ts";
 import { secretPrompt, validSecret } from "../shared/secret-prompt.ts";
 import { PasteImageError, savePaneImage } from "./paste.ts";
 import { PtySession } from "./pty/session.ts";
@@ -160,6 +160,18 @@ const MAX_WAITING_KEYS = 256;
  */
 export const SUBMIT_DEADLINE_MS = 45_000;
 const CLAUDE_INPUT_DRAFT_MESSAGE = "Claude Code's input box is not empty (a draft, bash mode, or a box that could not be read); send or clear it in the terminal, then send this message";
+/** How long a cleared Claude input box may take to read empty before the send is refused after all. */
+const DRAFT_CLEAR_WAIT_MS = 1_500;
+const DRAFT_CLEAR_POLL_MS = 50;
+
+/** input_draft, naming the one-row draft the chat may offer to clear (claudeClearableDraft), or none. */
+class InputDraftError extends HerdrError {
+  readonly draft: string | null;
+  constructor(draft: string | null) {
+    super("input_draft", CLAUDE_INPUT_DRAFT_MESSAGE);
+    this.draft = draft;
+  }
+}
 const SERVER_FEATURES: ServerFeature[] = ["submit", "pending-input", "secret-input", "input-ready", "take-over", "watch"];
 
 /** Bind addresses only this machine can reach, so an unset token is nobody else's business. */
@@ -488,7 +500,13 @@ export function createServer(
     return /(?:^|\s)@\S+$/.test(body) ? `${open}${body} ${close}` : text;
   };
 
-  async function submitText(paneId: string, text: string, payload: string, arrivedAt: number, fromTerminal = false, authorize: () => void = () => {}): Promise<void> {
+  /**
+   * `clearDraft`: the draft an input_draft refusal named, which the user asked to clear and send
+   * over. It goes only while the box still holds exactly that, and the message only once the box
+   * reads empty.
+   */
+  async function submitText(paneId: string, text: string, payload: string, arrivedAt: number, fromTerminal = false, authorize: () => void = () => {},
+    clearDraft?: string): Promise<void> {
     const inTime = (): void => {
       authorize();
       if (Date.now() - arrivedAt > (options.submitDeadlineMs ?? SUBMIT_DEADLINE_MS)) {
@@ -505,9 +523,19 @@ export function createServer(
       const pane = (await sessionSnapshot()).panes.find((candidate) => candidate.pane_id === paneId);
       inTime();
       if ((pane?.agent ?? pane?.agent_session?.agent) === "claude") {
-        const [live, colors] = await claudeBoxReads(paneId);
+        let reads = await claudeBoxReads(paneId);
         inTime();
-        if (claudeInputDraft(live, colors)) throw new HerdrError("input_draft", CLAUDE_INPUT_DRAFT_MESSAGE);
+        if (claudeInputDraft(...reads)) {
+          // only the draft the user was shown goes, never what has since replaced it
+          const draft = claudeClearableDraft(...reads);
+          if (clearDraft === undefined || draft !== clearDraft) throw new InputDraftError(draft);
+          await paneSendKeys(paneId, CLAUDE_CLEAR_INPUT_KEYS);
+          for (const deadline = Date.now() + DRAFT_CLEAR_WAIT_MS; claudeInputDraft(...(reads = await claudeBoxReads(paneId)));) {
+            if (Date.now() >= deadline) throw new InputDraftError(claudeClearableDraft(...reads));
+            await Bun.sleep(DRAFT_CLEAR_POLL_MS);
+          }
+          inTime();
+        }
       }
       try {
         await agentPrompt(paneId, closeMention(text));
@@ -2498,8 +2526,9 @@ export function createServer(
             }
             case "submit": {
               // every submit is answered: the composer keeps its text until it hears back
-              const result = (ok: boolean, code?: string, text?: string, accepted?: PendingMessage) => send(client, {
+              const result = (ok: boolean, code?: string, text?: string, accepted?: PendingMessage, draft?: string | null) => send(client, {
                 type: "submit-result", id: message.id, pane_id: message.pane_id, ok, ...(accepted ? { pending: accepted } : {}), ...(code ? { code, message: text } : {}),
+                ...(draft ? { draft } : {}),
               });
               if (!Number.isSafeInteger(message.id) || typeof message.pane_id !== "string" || !message.pane_id
                 || typeof message.text !== "string" || typeof message.payload !== "string") {
@@ -2509,6 +2538,11 @@ export function createServer(
               if ((message.delivery !== undefined && message.delivery !== "immediate" && message.delivery !== "queue")
                 || (message.delivery === "queue" && message.typed !== undefined && message.typed !== false)) {
                 result(false, "invalid_delivery", "Use immediate delivery, or queue a chat message");
+                break;
+              }
+              if (message.clear_draft !== undefined && (typeof message.clear_draft !== "string" || !message.clear_draft
+                || message.delivery === "queue" || (message.typed !== undefined && message.typed !== false))) {
+                result(false, "invalid_delivery", "Clear a terminal draft only for a chat message sent at once");
                 break;
               }
               if (client.data.mode === "observe") {
@@ -2556,11 +2590,11 @@ export function createServer(
                 await serialize(message.pane_id, () => {
                   // held while this waited its turn (the attach was refused after the check above)
                   if (attachments.get(message.pane_id)?.held) throw new HerdrError("attach_held", ATTACH_HELD_MESSAGE);
-                  return submitText(message.pane_id, message.text, message.payload, arrivedAt, message.typed === true, () => authorizeSocket(client));
+                  return submitText(message.pane_id, message.text, message.payload, arrivedAt, message.typed === true, () => authorizeSocket(client), message.clear_draft);
                 });
                 result(true);
               } catch (error) {
-                const fault = pendingFault(error); result(false, fault.code, fault.message);
+                const fault = pendingFault(error); result(false, fault.code, fault.message, undefined, error instanceof InputDraftError ? error.draft : null);
               }
               break;
             }

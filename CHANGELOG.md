@@ -26,6 +26,10 @@ between releases do not reach them. Remote-PC runtime bundles are versioned sepa
   their text, and a pinch no longer zooms the whole app (Settings sizes the text).
 
 ### Fixed
+- When a chat message is not sent because Claude Code's input box in the terminal is not empty,
+  the note now says what the box holds, and a one-line draft there can be cleared from the chat
+  with Clear it and send. The chat did not show that text, so Send seemed to do nothing until the
+  text was found and deleted in the terminal. The cleared text comes back in the terminal with Ctrl+Y.
 - Claude Code's effort slider (`/effort`) shows as a card in a pane under about 70 columns wide,
   such as a split in herdr or a pane the phone's terminal view has sized, and when the slider is
   on max. Claude draws the slider differently there, and the chat showed no card, so a level could

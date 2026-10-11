@@ -191,7 +191,11 @@ export async function checkPaneFind(browser: Browser, origin: string): Promise<v
     await page.keyboard.press("Escape");
     await uploadClosedGeometry;
 
+    // the phone's own refit first: a phone's More sheet rises (src/lib/sheets.ts), so the click on
+    // Find waits for it and the find bar's refit comes apart from this one
+    const viewportGeometry = resized();
     await page.setViewportSize({ width: 320, height: 844 });
+    await viewportGeometry;
     await page.getByRole("button", { name: "More", exact: true }).click();
     const phoneGeometry = resized();
     await page.getByRole("button", { name: "Find in terminal", exact: true }).click();
